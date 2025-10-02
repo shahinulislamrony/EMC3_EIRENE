@@ -165,25 +165,44 @@ except:
 print("read mach number...")
 M = load_flexible('MACH_NUMBER')
 
-# Read impurity radiation per ion
-print("read impurity radiation separated by ions...")
-RAD_files = glob.glob('../RADIATION*')
-RAD = []
 
-if len(RAD_files) == 0:
-    print("No impurity radiation files found. Setting RAD_padded = 0")
-    RAD_padded = np.zeros((1, Ncell[1]))  # one species, zero for all cells
-else:
-    for f in RAD_files:
-        out = load_flexible(f)
-        RAD.append(out)
-    shapes = [x.shape[0] for x in RAD]
-    max_len = max(shapes)
-    RAD_padded = np.vstack([
-        np.pad(x, (0, max_len-len(x)), mode='constant', constant_values=np.nan) 
-        if len(x) < max_len else x[:max_len] 
-        for x in RAD
-    ])
+n_species_total = 9
+RAD_padded = np.zeros((n_species_total, Ncell[1]))
+
+# --- Main radiation ---
+rad1_files = glob.glob('../RADIATION_1')
+if rad1_files:
+    out = load_flexible(rad1_files[0]).flatten()
+    if len(out) < Ncell[1]:
+        out = np.pad(out, (0, Ncell[1]-len(out)), 'constant')
+    else:
+        out = out[:Ncell[1]]  # truncate if longer
+    RAD_padded[0, :] = out
+
+# --- Impurity radiation (RADIATION_2) ---
+rad2_files = glob.glob('../RADIATION_2')
+if rad2_files:
+    out = load_flexible(rad2_files[0]).flatten()
+    n_cols_per_species = int(np.ceil(len(out)/8))  # 8 impurity species
+    for NZ in range(1, 9):  # indices 1..8 in RAD_padded
+        start_idx = (NZ-1)*n_cols_per_species
+        end_idx = min(start_idx + n_cols_per_species, len(out))
+        A = out[start_idx:end_idx]
+        # fix length exactly Ncell[1]
+        if len(A) < Ncell[1]:
+            A = np.pad(A, (0, Ncell[1]-len(A)), 'constant')
+        else:
+            A = A[:Ncell[1]]
+        RAD_padded[NZ, :] = A
+
+print("RAD_padded shape:", RAD_padded.shape)
+print("First 10 values of species 1:", RAD_padded[0,:10])
+print("First 10 values of species 2:", RAD_padded[1,:10])
+print("Max value:", np.nanmax(RAD_padded))
+print("Min value:", np.nanmin(RAD_padded))
+
+
+
 
 # Read connection length
 try:
@@ -400,22 +419,54 @@ make_patch_plot(polygons, ti_vals, 'T$_i$', cmap='plasma', cbar_label='T$_i$ [eV
 make_patch_plot(polygons, mach_vals, 'Mach number', cmap='coolwarm', cbar_label='M', ax=axs[3])
 
 # Total radiation
-if len(rad_vals) > 0:
-    rad_sum = np.sum([np.array(rv) for rv in rad_vals], axis=0)
-    make_patch_plot(polygons, rad_sum, 'Total Radiation',
-                    cmap='inferno', cbar_label='ΣRad [a.u.]', ax=axs[4])
 
-# Hide the last unused subplot
-axs[5].axis('off')
+if len(rad_vals) > 0:
+    # Convert all to arrays and ensure consistent length
+    rad_arrays = [np.asarray(rv) for rv in rad_vals]
+    rad_sum = np.sum(rad_arrays, axis=0)
+    
+    make_patch_plot(polygons, rad_sum*1e6, 'Total Radiation',
+                    cmap='turbo', cbar_label='ΣRad [a.u.]', ax=axs[4])
+
+# Hide unused subplot(s) safely
+for ax in axs[5:]:
+    ax.axis('off')
 
 plt.tight_layout()
 plt.show()
 
 
 
+
+n_species = RAD_padded.shape[0]
+
+# 1️⃣ Total radiation
+rad_sum = np.nansum(RAD_padded, axis=0)  # sum ignoring NaNs
+make_patch_plot(polygons, rad_sum*1e6, 'Total Radiation',
+                cmap='turbo', cbar_label='ΣRad [a.u.]', ax=axs[4])
+
+rad_max = np.nanmax(RAD_padded*1e6)
+
+fig, axs_species = plt.subplots(3, 3, figsize=(15, 10))
+axs_species = axs_species.flatten()
+
+for i in range(n_species):
+    # clip data to global max for consistent color scaling
+    data = np.clip(RAD_padded[i,:]*1e6, 0, rad_max)
+    make_patch_plot(polygons, data,
+                    f'Species {i+1} Radiation',
+                    cmap='turbo', cbar_label='Rad [a.u.]',
+                    ax=axs_species[i])
+
+# Hide unused axes if fewer than 9 species
+for j in range(n_species, len(axs_species)):
+    axs_species[j].axis('off')
+
+plt.tight_layout()
+plt.show()
+
+
 #now for toroidal slices and save in the folder
-
-
 
 
 # List of phi0 values to plot
