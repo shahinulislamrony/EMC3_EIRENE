@@ -169,12 +169,21 @@ M = load_flexible('MACH_NUMBER')
 print("read impurity radiation separated by ions...")
 RAD_files = glob.glob('../RADIATION*')
 RAD = []
-for f in RAD_files:
-    out = load_flexible(f)
-    RAD.append(out)
-shapes = [x.shape[0] for x in RAD]
-max_len = max(shapes)
-RAD_padded = np.vstack([np.pad(x, (0, max_len-len(x)), mode='constant', constant_values=np.nan) if len(x)<max_len else x[:max_len] for x in RAD])
+
+if len(RAD_files) == 0:
+    print("No impurity radiation files found. Setting RAD_padded = 0")
+    RAD_padded = np.zeros((1, Ncell[1]))  # one species, zero for all cells
+else:
+    for f in RAD_files:
+        out = load_flexible(f)
+        RAD.append(out)
+    shapes = [x.shape[0] for x in RAD]
+    max_len = max(shapes)
+    RAD_padded = np.vstack([
+        np.pad(x, (0, max_len-len(x)), mode='constant', constant_values=np.nan) 
+        if len(x) < max_len else x[:max_len] 
+        for x in RAD
+    ])
 
 # Read connection length
 try:
