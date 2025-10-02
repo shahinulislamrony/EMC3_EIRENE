@@ -4,6 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import glob
 from matplotlib.collections import PolyCollection
+import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # Set working directory
 os.chdir(r'C:\W7X\t2120ms-20250929T105025Z-1-001\t2120ms\OUTPUT')
@@ -288,7 +291,10 @@ for idx in np.where(cond_cell)[0]:
     density_vals.append(np.log10(N[0, data_idx] * 1e6))
     te_vals.append(TE[data_idx])
     
-fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+
+
+fig, axs = plt.subplots(1, 2, figsize=(12, 6), sharex=True)
 
 # Density patch plot
 coll = PolyCollection(polygons, array=np.array(density_vals), cmap='turbo', edgecolor='none')
@@ -298,7 +304,6 @@ axs[0].set_aspect('equal')
 axs[0].set_xlabel('R [m]')
 axs[0].set_ylabel('Z [m]')
 axs[0].set_title('log$_{10}$ n$_e$ [m$^{-3}$]')
-fig.colorbar(coll, ax=axs[0], label='log$_{10}$ n$_e$')
 
 # Electron temperature patch plot
 coll2 = PolyCollection(polygons, array=np.array(te_vals), cmap='turbo', edgecolor='none')
@@ -306,9 +311,20 @@ axs[1].add_collection(coll2)
 axs[1].autoscale()
 axs[1].set_aspect('equal')
 axs[1].set_xlabel('R [m]')
-axs[1].set_ylabel('Z [m]')
 axs[1].set_title('T$_e$ [eV]')
-fig.colorbar(coll2, ax=axs[1], label='T$_e$ [eV]')
+# Hide redundant y-label and y-ticks on right subplot
+axs[1].set_ylabel('')
+axs[1].tick_params(axis='y', labelleft=False)
 
-plt.tight_layout()
+# Adjust horizontal space between subplots
+plt.subplots_adjust(wspace=0.25)  # Increase for more space if needed
+
+
+# Place colorbars next to each subplot, matching their height, with more pad
+for ax, coll_item in zip(axs, [coll, coll2]):   # extend list if you have more
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.3)  # increase pad for more spacing
+    plt.colorbar(coll_item, cax=cax)  # no label
+
+
 plt.show()
