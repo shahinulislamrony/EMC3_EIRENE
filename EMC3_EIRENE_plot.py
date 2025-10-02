@@ -1,3 +1,7 @@
+
+##Shahinul, 10022025
+
+
 import os
 import numpy as np
 import pandas as pd
@@ -5,12 +9,12 @@ import matplotlib.pyplot as plt
 import glob
 from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
-from matplotlib.collections import PolyCollection
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+
 
 # Set working directory
 os.chdir(r'C:\W7X\t2120ms-20250929T105025Z-1-001\t2120ms\OUTPUT')
-
 inputgeofile = r'C:\W7X\20171207_21-20250921T133000Z-1-001\20171207_21\input.geo'
 gridfile = r'C:\W7X\20171207_21-20250921T133000Z-1-001\20171207_21\grid3D.dat'
 Bfile = r'C:\W7X\20171207_21-20250921T133000Z-1-001\20171207_21\bfield.dat'
@@ -271,7 +275,7 @@ print("Points to plot:", np.sum(cond_cell))
 
 print(f"Closest phi value to {phi0} is {closest_phi_value}")
 
-from matplotlib.collections import PolyCollection
+
 
 # --- Prepare polygons and color data for active cells in the selected toroidal slice ---
 # Only use the first 4 vertices for each cell (as in MATLAB patch)
@@ -328,3 +332,144 @@ for ax, coll_item in zip(axs, [coll, coll2]):   # extend list if you have more
 
 
 plt.show()
+
+
+
+
+def make_patch_plot(polygons, values, title, cmap='turbo', cbar_label='', ax=None):
+    coll = PolyCollection(polygons, array=np.array(values), cmap=cmap, edgecolor='none')
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6,6))
+    ax.add_collection(coll)
+    ax.autoscale()
+    ax.set_aspect('equal')
+    ax.set_xlabel('R [m]')
+    ax.set_ylabel('Z [m]')
+    ax.set_title(title)
+    
+    # Colorbar
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.18)
+    plt.colorbar(coll, cax=cax, label=cbar_label)
+    return ax
+
+
+
+density_vals, te_vals, ti_vals, mach_vals, cl_vals = [], [], [], [], []
+rad_vals = [[] for _ in range(RAD_padded.shape[0])]  # one list per ion species
+
+
+polygons = []
+for idx in np.where(cond_cell)[0]:
+    cell_idx = active_indices[idx]
+    data_idx = int(IDCELL[cell_idx])
+    if data_idx < 0 or data_idx >= N.shape[1]:
+        continue
+    
+    verts_R = R_vertices[cell_idx, :4] / 100  # cm → m
+    verts_Z = Z_vertices[cell_idx, :4] / 100
+    poly = np.column_stack((verts_R, verts_Z))
+    polygons.append(poly)
+
+    density_vals.append(np.log10(N[0, data_idx] * 1e6))   # log10 ne [m^-3]
+    te_vals.append(TE[data_idx])
+    ti_vals.append(TI[data_idx])
+    mach_vals.append(M[data_idx])
+    if isinstance(CL, np.ndarray) and len(CL) > data_idx:
+        cl_vals.append(CL[data_idx])
+    for i in range(RAD_padded.shape[0]):
+        if data_idx < RAD_padded.shape[1]:
+            rad_vals[i].append(RAD_padded[i, data_idx])
+
+
+fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+axs = axs.flatten()
+
+make_patch_plot(polygons, density_vals, 'log$_{10}$ n$_e$', cmap='turbo', cbar_label='log$_{10}$ n$_e$ [m$^{-3}$]', ax=axs[0])
+make_patch_plot(polygons, te_vals, 'T$_e$', cmap='plasma', cbar_label='T$_e$ [eV]', ax=axs[1])
+make_patch_plot(polygons, ti_vals, 'T$_i$', cmap='plasma', cbar_label='T$_i$ [eV]', ax=axs[2])
+make_patch_plot(polygons, mach_vals, 'Mach number', cmap='coolwarm', cbar_label='M', ax=axs[3])
+
+# Total radiation
+if len(rad_vals) > 0:
+    rad_sum = np.sum([np.array(rv) for rv in rad_vals], axis=0)
+    make_patch_plot(polygons, rad_sum, 'Total Radiation',
+                    cmap='inferno', cbar_label='ΣRad [a.u.]', ax=axs[4])
+
+# Hide the last unused subplot
+axs[5].axis('off')
+
+plt.tight_layout()
+plt.show()
+
+
+
+#now for toroidal slices and save in the folder
+
+
+
+
+# List of phi0 values to plot
+angles = [0, 5, 10, 15, 20, 25, 30, 36]
+
+for phi0 in angles:
+    # Make folder for each angle
+    outdir = f"phi_{phi0}"
+    os.makedirs(outdir, exist_ok=True)
+
+    # Pick slice closest to phi0
+    closest_phi_value = PHIp_active[np.argmin(np.abs(PHIp_active - phi0))]
+    cond_cell = np.isclose(PHIp_active, closest_phi_value)
+
+    print(f"phi0 = {phi0}, closest phi = {closest_phi_value}, cells = {np.sum(cond_cell)}")
+
+    # --- Gather values for this slice ---
+    polygons, density_vals, te_vals, ti_vals, mach_vals, cl_vals = [], [], [], [], [], []
+    rad_vals = [[] for _ in range(RAD_padded.shape[0])]
+
+    for idx in np.where(cond_cell)[0]:
+        cell_idx = active_indices[idx]
+        data_idx = int(IDCELL[cell_idx])
+        if data_idx < 0 or data_idx >= N.shape[1]:
+            continue
+
+        verts_R = R_vertices[cell_idx, :4] / 100  # cm → m
+        verts_Z = Z_vertices[cell_idx, :4] / 100
+        poly = np.column_stack((verts_R, verts_Z))
+        polygons.append(poly)
+
+        density_vals.append(np.log10(N[0, data_idx] * 1e6))
+        te_vals.append(TE[data_idx])
+        ti_vals.append(TI[data_idx])
+        mach_vals.append(M[data_idx])
+        if isinstance(CL, np.ndarray) and len(CL) > data_idx:
+            cl_vals.append(CL[data_idx])
+        for i in range(RAD_padded.shape[0]):
+            if data_idx < RAD_padded.shape[1]:
+                rad_vals[i].append(RAD_padded[i, data_idx])
+
+    # --- Make plots ---
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+    axs = axs.flatten()
+
+    make_patch_plot(polygons, density_vals, 'log$_{10}$ n$_e$', cmap='turbo',
+                    cbar_label='log$_{10}$ n$_e$ [m$^{-3}$]', ax=axs[0])
+    make_patch_plot(polygons, te_vals, 'T$_e$', cmap='plasma',
+                    cbar_label='T$_e$ [eV]', ax=axs[1])
+    make_patch_plot(polygons, ti_vals, 'T$_i$', cmap='plasma',
+                    cbar_label='T$_i$ [eV]', ax=axs[2])
+    make_patch_plot(polygons, mach_vals, 'Mach number', cmap='coolwarm',
+                    cbar_label='M', ax=axs[3])
+
+    # Total radiation
+    if len(rad_vals) > 0:
+        rad_sum = np.sum([np.array(rv) for rv in rad_vals], axis=0)
+        make_patch_plot(polygons, rad_sum, 'Total Radiation',
+                        cmap='inferno', cbar_label='ΣRad [a.u.]', ax=axs[4])
+
+    axs[5].axis('off')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, f"slice_phi{phi0}.png"), dpi=300)
+    plt.close(fig)
+
